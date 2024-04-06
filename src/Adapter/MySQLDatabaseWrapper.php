@@ -5,22 +5,22 @@ use \PDO;
 use DavidFricker\DataAbstracter\Interfaces\InterfaceDatabaseWrapper;
 
 /**
-  * A wrapper around a DB driver to expose a uniform interface
-  *
-  * Basically an abstraction over the complexity of the PDO class, but by design this could wrap any structured storage mechanism
-  * In addition, this class provides helper functions to make common queries quick and simple to perform
-  */
+ * A wrapper around a DB driver to expose a uniform interface
+ *
+ * Basically an abstraction over the complexity of the PDO class, but by design this could wrap any structured storage mechanism
+ * In addition, this class provides helper functions to make common queries quick and simple to perform
+ */
 class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
     private $handle;
     private $error_str = '';
 
     private $default_options = array(
-                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_PERSISTENT => true,
-                PDO::ATTR_EMULATE_PREPARES => false
-            );
+        1002 => 'SET NAMES utf8mb4',
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_PERSISTENT => true,
+        PDO::ATTR_EMULATE_PREPARES => false
+    );
 
     /**
      * Wrapper constructor
@@ -52,7 +52,7 @@ class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
     public function delete($table, $where=[], $limit=false) {
         $sql = '';
         $bind_values = [];
-        
+
         if (!is_array($where) || empty($where)) {
             $sql = 'DELETE FROM `' . $table . '`';
         } else {
@@ -110,17 +110,21 @@ class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
      * @param  boolean $limit optional, integer describing the amount of matching rows to fetch
      * @return mixed see return value of run
      */
-    public function fetch($table, $columns, $where=[], $limit=false) {
+    public function fetch($table, $columns, $where=[], $limit=false, $order_by=false) {
         if (empty($columns)) {
             return false;
         }
 
         $bind_values = [];
-        $sql = 'SELECT ' . implode(', ', $columns) . ' FROM `' . $table . '`';
+        $sql = 'SELECT ' . implode(', ',$columns) . ' FROM `' . $table . '`';
 
         if (is_array($where) && !empty($where)) {
             $sql .= ' WHERE ' . $this->prepareBinding($where, ' AND ');
             $bind_values = array_merge($bind_values, array_values($where));
+        }
+
+        if ($order_by) {
+            $sql .= ' ORDER BY '. $order_by;
         }
 
         if ($limit && is_int($limit)) {
@@ -132,6 +136,110 @@ class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
         }
 
         return $this->run($sql, $bind_values);
+    }
+
+    /**
+     * Pull one or more rows with general search query
+     *
+     * As this is intended to be a simple helper function the only 'glue' to hold together the where clauses is 'AND' more complex update statements should be performed using run()
+     * IMPORTANT: Ensure the $columns variable does not contain user input as it is inserted as-is into the statement - vulnerable to SQL injection
+     *
+     * @param  string $table name of table in the database
+     * @param  array $data  key:value pairs, key is the column and value is the new value for each affected row
+     * @param  array $where optional, key:value pairs - column and expected value to filter by
+     * @param  boolean $limit optional, integer describing the amount of matching rows to fetch
+     * @return mixed see return value of run
+     */
+    public function fetchWithSearch($search, $table, $columns, $where=[], $limit=false, $order_by=false) {
+        if (empty($columns)) {
+            return false;
+        }
+
+        $bind_values = [];
+        $sql = 'SELECT ' . implode($columns, ', ') . ' FROM `' . $table . '`';
+
+        if (is_array($where) && !empty($where)) {
+            $sql .= ' WHERE ' . $this->prepareBinding($where, ' AND ');
+            $bind_values = array_merge($bind_values, array_values($where));
+
+
+            $sql .= ' AND concat(' . implode(', \'\',', $columns) . ') like "%'.$search.'%"';
+            // $sql .= ' AND MATCH (' . implode(',', $columns) . ') AGAINST("'.$search.'")';
+        }else{
+
+            $sql .= ' WHERE concat(' . implode(', \'\',', $columns) . ') like "%'.$search.'%"';
+            //$sql .= ' WHERE MATCH (' . implode(',', $columns) . ') AGAINST("'.$search.'")';
+        }
+        //$searchQuery = [];
+        //foreach ($columns as $key) {
+        //   $searchQuery[] = "$key";
+        //}
+
+        // $sql .= ' AND concat(' . implode(', \'\',', $columns) . ') like "%'.$search.'%"';
+//shipping_name, billing_name, email) AGAINST
+        if ($order_by) {
+            $sql .= ' ORDER BY '. $order_by;
+        }
+
+        if ($limit && is_int($limit)) {
+            $sql .= ' LIMIT '. $limit;
+        }
+
+        if ($limit && is_array($limit)) {
+            $sql .= ' LIMIT '. $limit[0] . ', ' . $limit[1];
+        }
+
+        return $this->run($sql, $bind_values);
+    }
+
+    /**
+     * Pull one or more rows with general search query
+     *
+     * As this is intended to be a simple helper function the only 'glue' to hold together the where clauses is 'AND' more complex update statements should be performed using run()
+     * IMPORTANT: Ensure the $columns variable does not contain user input as it is inserted as-is into the statement - vulnerable to SQL injection
+     *
+     * @param  string $table name of table in the database
+     * @param  array $data  key:value pairs, key is the column and value is the new value for each affected row
+     * @param  array $where optional, key:value pairs - column and expected value to filter by
+     * @param  boolean $limit optional, integer describing the amount of matching rows to fetch
+     * @return mixed see return value of run
+     */
+    public function countWithSearch($search, $table, $columns, $where=[]) {
+        $bind_values = [];
+        $sql = 'SELECT COUNT(*) as theCount FROM `' . $table . '`';
+
+        if (is_array($where) && !empty($where)) {
+            $sql .= ' WHERE ' . $this->prepareBinding($where, ' AND ');
+            $bind_values = array_merge($bind_values, array_values($where));
+
+            $sql .= ' AND concat(' . implode(', \'\',', $columns) . ') like "%'.$search.'%"';
+        }else{
+            $sql .= ' WHERE concat(' . implode(', \'\',', $columns) . ') like "%'.$search.'%"';
+        }
+
+        $result = $this->run($sql, $bind_values);
+        if (!$result) {
+            return $result;
+        }
+
+        return $result[0]['theCount'];
+    }
+
+    public function count($table, $where=[]) {
+        $bind_values = [];
+        $sql = 'SELECT COUNT(*) as theCount FROM `' . $table . '`';
+
+        if (is_array($where) && !empty($where)) {
+            $sql .= ' WHERE ' . $this->prepareBinding($where, ' AND ');
+            $bind_values = array_merge($bind_values, array_values($where));
+        }
+
+        $result = $this->run($sql, $bind_values);
+        if(!$result) {
+            return $result;
+        }
+
+        return $result[0]['theCount'];
     }
 
     /**
@@ -228,7 +336,8 @@ class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
      * @param  string $glue to be put in-between each column:data pair in the result
      * @return string final SQL fragment, injection safe as long as the keys in $data are safe
      */
-    private function prepareBinding($data, $glue) {
+    private function prepareBinding(array $data, string $glue): string
+    {
         $binding = '';
         foreach (array_keys($data) as $column_name) {
             $binding .= '`' . $column_name . '` = ? '.$glue;
