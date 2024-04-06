@@ -291,7 +291,7 @@ class MySQLDatabaseWrapper extends \PDO implements InterfaceDatabaseWrapper {
             // default to simply indicating success
             return true;
         } catch (\PDOException $e) {
-            $this->error = $e->getMessage();
+            $this->error_str = $e->getMessage();
             return false;
         }
     }
